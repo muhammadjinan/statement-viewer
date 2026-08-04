@@ -49,7 +49,8 @@ function processExcel(file) {
             const firstSheetName = workbook.SheetNames[0];
             const worksheet = workbook.Sheets[firstSheetName];
             
-            const rows = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+            // raw: false forces SheetJS to output formatted strings (fixes the date issue)
+            const rows = XLSX.utils.sheet_to_json(worksheet, { header: 1, raw: false, defval: '' });
             extractTransactions(rows);
             resolve();
         };
@@ -100,35 +101,56 @@ async function processPDF(file) {
 
 function extractTransactions(rows) {
     let isTransactionSection = false;
+    
+    // Default column mapping based on standard HDFC format
+    let cols = { date: 0, narration: 1, withdrawal: 4, deposit: 5, balance: 6 };
 
     for (let i = 0; i < rows.length; i++) {
         const row = rows[i];
         if (!row || row.length < 2) continue;
 
         const cleanRow = row.map(cell => cell ? String(cell).trim() : '');
+        const rowStr = cleanRow.join(' ').toLowerCase();
 
-        if (cleanRow[0].includes('Date') && cleanRow[1].includes('Narration')) {
+        // Dynamically detect headers and adjust column mapping
+        if (rowStr.includes('date') && rowStr.includes('narration') && rowStr.includes('balance')) {
             isTransactionSection = true;
+            
+            const dateIdx = cleanRow.findIndex(c => c.toLowerCase().includes('date'));
+            const narrIdx = cleanRow.findIndex(c => c.toLowerCase().includes('narration'));
+            const withIdx = cleanRow.findIndex(c => c.toLowerCase().includes('withdrawal') || c.toLowerCase().includes('debit'));
+            const depIdx = cleanRow.findIndex(c => c.toLowerCase().includes('deposit') || c.toLowerCase().includes('credit'));
+            const balIdx = cleanRow.findIndex(c => c.toLowerCase().includes('balance'));
+            
+            if (dateIdx !== -1) cols.date = dateIdx;
+            if (narrIdx !== -1) cols.narration = narrIdx;
+            if (withIdx !== -1) cols.withdrawal = withIdx;
+            if (depIdx !== -1) cols.deposit = depIdx;
+            if (balIdx !== -1) cols.balance = balIdx;
+            
             continue;
         }
 
-        if (cleanRow.join('').includes('STATEMENT SUMMARY') || cleanRow.join('').includes('Opening Balance')) {
+        if (rowStr.includes('statement summary') || rowStr.includes('opening balance') || rowStr.includes('end of statement')) {
             isTransactionSection = false;
         }
 
         if (isTransactionSection) {
-            // Trim whitespace/hidden characters from the date string before testing
-            const dateStr = cleanRow[0].trim();
-            const datePattern = /^\d{2}\/\d{2}\/\d{2,4}$/;
+            const dateStr = cleanRow[cols.date] || '';
+            // More flexible date check allowing hyphens, slashes, or dots
+            const datePattern = /^\d{2}[-/\.]\d{2}[-/\.]\d{2,4}$/;
             
             if (!datePattern.test(dateStr)) continue;
 
-            const narration = cleanRow[1] || '';
-            const withdrawal = parseFloat(cleanRow[4]) || 0;
-            const deposit = parseFloat(cleanRow[5]) || 0;
-            const balance = cleanRow[6] || '';
+            const narration = cleanRow[cols.narration] || '';
+            
+            // Remove commas from numbers before parsing
+            const parseAmount = (val) => parseFloat(String(val).replace(/,/g, '')) || 0;
+            
+            const withdrawal = parseAmount(cleanRow[cols.withdrawal]);
+            const deposit = parseAmount(cleanRow[cols.deposit]);
+            const balance = cleanRow[cols.balance] || '';
 
-            // Expanded regex to catch variations of interest payments
             const isInterest = /interest|int\.?\s*pd|int\.?\s*rec/i.test(narration);
 
             const uniqueKey = `${dateStr}_${narration.substring(0, 20)}_${withdrawal}_${deposit}`;
@@ -155,16 +177,15 @@ function updateDashboard() {
     }
 
     const sortedTxns = Array.from(allTransactions.values()).sort((a, b) => {
-        const [d1, m1, y1] = a.date.split('/');
-        const [d2, m2, y2] = b.date.split('/');
-        // Normalize year for sorting (assuming 20xx)
+        const splitChar = a.date.includes('/') ? '/' : a.date.includes('-') ? '-' : '.';
+        const [d1, m1, y1] = a.date.split(splitChar);
+        const [d2, m2, y2] = b.date.split(splitChar);
         const year1 = y1.length === 2 ? `20${y1}` : y1;
         const year2 = y2.length === 2 ? `20${y2}` : y2;
         return new Date(`${year1}-${m1}-${d1}`) - new Date(`${year2}-${m2}-${d2}`);
     });
 
     sortedTxns.forEach(txn => {
-        // Only sum the interest transactions for the dashboard cards
         if (txn.isInterest) {
             totalInterestCr += txn.deposit;
             totalInterestDr += txn.withdrawal;
@@ -172,7 +193,6 @@ function updateDashboard() {
 
         const tr = document.createElement('tr');
         
-        // Highlight interest rows in a subtle blue for easier scanning
         if (txn.isInterest) {
             tr.style.backgroundColor = '#f0f8ff';
         }
@@ -194,4 +214,4 @@ function updateDashboard() {
 function resetApp() {
     allTransactions.clear();
     updateDashboard();
-}
+            }
