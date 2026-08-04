@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bank Statement Analyzer</title>
+    <link rel="stylesheet" href="styles.css">
+    
+    <!-- SheetJS for XLS/XLSX/TXT parsing -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <!-- PDF.js for PDF parsing -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Statement Analyzer</h1>
+            <div class="privacy-note">
+                <strong>Privacy Note:</strong> No user data is saved or transmitted. All processing happens entirely within your browser's memory. Refreshing or closing this page will immediately reset and remove all uploaded data.
+            </div>
+        </header>
+
+        <section class="controls">
+            <input type="file" id="fileUpload" accept=".xls,.xlsx,.txt,.pdf" multiple hidden>
+            <label for="fileUpload" class="btn-primary">Upload Statements</label>
+            <button id="clearData" class="btn-secondary">Clear Data</button>
+        </section>
+
+        <section class="dashboard">
+            <div class="summary-card success">
+                <h3>Total Interest Received</h3>
+                <p id="totalInterestCr">₹ 0.00</p>
+            </div>
+            <div class="summary-card danger">
+                <h3>Total Interest Given/Deducted</h3>
+                <p id="totalInterestDr">₹ 0.00</p>
+            </div>
+        </section>
+
+        <section class="table-container">
+            <h2>Interest Transactions</h2>
+            <table id="dataTable">
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Narration</th>
+                        <th>Withdrawal (Dr)</th>
+                        <th>Deposit (Cr)</th>
+                        <th>Closing Balance</th>
+                    </tr>
+                </thead>
+                <tbody id="tableBody">
+                    <tr>
+                        <td colspan="5" class="empty-state">No files uploaded yet.</td>
+                    </tr>
+                </tbody>
+            </table>
+        </section>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
