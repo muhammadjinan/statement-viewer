@@ -75,28 +75,63 @@ function processText(file) {
 
 async function processPDF(file) {
     const arrayBuffer = await file.arrayBuffer();
-    const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-    let rows = [];
-
-    for (let i = 1; i <= pdf.numPages; i++) {
-        const page = await pdf.getPage(i);
-        const textContent = await page.getTextContent();
+    
+    // Initialize the loading task instead of immediately resolving the promise
+    const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer });
+    
+    // Attach the password handler
+    loadingTask.onPassword = function(updatePassword, reason) {
+        // reason 1 = initial request, reason 2 = incorrect password
+        const message = reason === 1 
+            ? `Please enter the password for ${file.name}:` 
+            : `Incorrect password for ${file.name}. Please try again:`;
         
-        let itemsByY = {};
-        textContent.items.forEach(item => {
-            const y = Math.round(item.transform[5]);
-            if (!itemsByY[y]) itemsByY[y] = [];
-            itemsByY[y].push(item);
-        });
-
-        const yCoords = Object.keys(itemsByY).map(Number).sort((a, b) => b - a);
+        const password = prompt(message);
         
-        yCoords.forEach(y => {
-            const rowItems = itemsByY[y].sort((a, b) => a.transform[4] - b.transform[4]);
-            rows.push(rowItems.map(item => item.str));
-        });
+        if (password !== null) {
+            // Send the password back to pdf.js to try unlocking
+            updatePassword(password);
+        } else {
+            // User clicked Cancel on the prompt
+            updatePassword(new Error('Password input cancelled.'));
+        }
+    };
+
+    try {
+        // Wait for the document to load (this pauses if onPassword is triggered)
+        const pdf = await loadingTask.promise;
+        let rows = [];
+
+        for (let i = 1; i <= pdf.numPages; i++) {
+            const page = await pdf.getPage(i);
+            const textContent = await page.getTextContent();
+            
+            let itemsByY = {};
+            textContent.items.forEach(item => {
+                const y = Math.round(item.transform[5]);
+                if (!itemsByY[y]) itemsByY[y] = [];
+                itemsByY[y].push(item);
+            });
+
+            const yCoords = Object.keys(itemsByY).map(Number).sort((a, b) => b - a);
+            
+            yCoords.forEach(y => {
+                const rowItems = itemsByY[y].sort((a, b) => a.transform[4] - b.transform[4]);
+                rows.push(rowItems.map(item => item.str));
+            });
+        }
+        extractTransactions(rows);
+        
+    } catch (error) {
+        console.error(`Failed to load ${file.name}:`, error);
+        
+        // Handle specific password errors smoothly without breaking the whole app
+        if (error.name === 'PasswordException' || error.message.includes('cancelled')) {
+            alert(`Skipped ${file.name}: Password prompt was cancelled or failed.`);
+        } else {
+            throw error; // Re-throw other unexpected errors to be caught by handleFileUpload
+        }
     }
-    extractTransactions(rows);
 }
 
 function extractTransactions(rows) {
