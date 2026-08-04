@@ -45,6 +45,16 @@ h1 {
     font-size: 0.9rem;
 }
 
+.bug-banner {
+    background-color: #fff3cd;
+    color: #856404;
+    padding: 10px 15px;
+    border-radius: 6px;
+    border-left: 4px solid #ffc107;
+    font-size: 0.9rem;
+    margin-top: 1rem;
+}
+
 .controls {
     display: flex;
     gap: 1rem;
